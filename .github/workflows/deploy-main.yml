@@ -36,7 +36,8 @@ jobs:
           mkdir -p artifact
           cp -r dist artifact/dist
           cp -r node_modules artifact/node_modules
-          cp package.json package-lock.json prisma.config.ts artifact/
+          # 아래 줄에 tsconfig.json을 추가했습니다!
+          cp package.json package-lock.json prisma.config.ts tsconfig.json artifact/
           if [ -d prisma ]; then cp -r prisma artifact/prisma; fi
           tar -czf artifact.tgz -C artifact .
       - name: Upload artifact
