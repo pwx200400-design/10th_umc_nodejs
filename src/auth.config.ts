@@ -1,0 +1,134 @@
+import dotenv from "dotenv";
+import { Strategy as GoogleStrategy, Profile } from "passport-google-oauth20";
+import { Strategy as KakaoStrategy, Profile as KakaoProfile } from "passport-kakao";
+import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import jwt from "jsonwebtoken";
+import { prisma } from "./db.config.js";
+
+dotenv.config();
+
+// 1. JWT 토큰 생성 함수 (타입 지정)
+export const generateAccessToken = (user: { id: number; email: string }) => {
+  return jwt.sign(
+    { id: user.id, email: user.email },
+    process.env.JWT_SECRET!,
+    { expiresIn: "1h" }
+  );
+};
+
+export const generateRefreshToken = (user: { id: number }) => {
+  return jwt.sign(
+    { id: user.id },
+    process.env.JWT_SECRET!,
+    { expiresIn: "14d" }
+  );
+};
+
+// 2. Google Verify 로직 
+const googleVerify = async (profile: Profile) => {
+  const email = profile.emails?.[0]?.value;
+  if (!email) throw new Error("Google 프로필에 이메일이 없습니다.");
+
+  let user = await prisma.user.findFirst({ where: { email } });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+          name: profile.displayName,
+          birth: new Date("1970-01-01"),
+          phoneNumber: "000-0000-0000",
+          gender: null,
+          address: null,
+          detailAddress: null,
+      },
+    });
+  }
+
+  return { id: user.id, email: user.email, name: user.name };
+};
+
+// 3. Google Strategy
+export const googleStrategy = new GoogleStrategy(
+  {
+    clientID: process.env.PASSPORT_GOOGLE_CLIENT_ID!,
+    clientSecret: process.env.PASSPORT_GOOGLE_CLIENT_SECRET!,
+    callbackURL: "http://localhost:3000/oauth2/callback/google",
+    scope: ["email", "profile"],
+  },
+  async (_accessToken, _refreshToken, profile, cb) => {
+    try {
+      const user = await googleVerify(profile);
+      const tokens = {
+        accessToken: generateAccessToken(user),
+        refreshToken: generateRefreshToken(user),
+      };
+      return cb(null, tokens);
+    } catch (err) {
+      return cb(err as Error);
+    }
+  }
+);
+
+//  kakao Verify 로직 
+const kakaoVerify = async (profile: KakaoProfile) => {
+  // 카카오 프로필 데이터 구조는 profile._json.kakao_account 에 담겨있습니다.
+  const email = profile._json.kakao_account?.email;
+  const name = profile.displayName || "카카오유저"; // 이름이 없을 경우 대비
+
+  if (!email) throw new Error("카카오 프로필에 이메일이 없습니다. (동의항목 확인 필요)");
+
+  let user = await prisma.user.findFirst({ where: { email } });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        birth: new Date("1970-01-01"),
+        phoneNumber: "000-0000-0000",
+        gender: null,
+        address: null,
+        detailAddress: null,
+      },
+    });
+  }
+  return { id: user.id, email: user.email, name: user.name };
+};
+
+//  kakao Strategy
+export const kakaoStrategy = new KakaoStrategy(
+  {
+    clientID: process.env.KAKAO_REST_API_KEY!, // 발급받은 REST API 키
+    clientSecret: process.env.KAKAO_CLIENT_SECRET!,
+    callbackURL: "http://localhost:3000/oauth2/callback/kakao",
+  },
+  async (_accessToken, _refreshToken, profile, cb) => {
+    try {
+      const user = await kakaoVerify(profile);
+      
+      const tokens = {
+        accessToken: generateAccessToken(user),
+        refreshToken: generateRefreshToken(user),
+      };
+      return cb(null, tokens);
+    } catch (err) {
+      return cb(err as Error);
+    }
+  }
+);
+
+export const jwtStrategy = new JwtStrategy(
+  {
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: process.env.JWT_SECRET!,
+  },
+  async (payload, done) => {
+    try {
+      const user = await prisma.user.findFirst({ where: { id: payload.id } });
+      return user ? done(null, user) : done(null, false);
+    } catch (err) {
+      return done(err, false);
+    }
+  }
+);
