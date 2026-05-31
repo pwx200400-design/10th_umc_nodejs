@@ -9,7 +9,7 @@ import {
 
 } from "../repositories/user.repository.js";
 ;
-import { DuplicateUserEmailError } from "../../../../src/common/errors/custom.error.js";
+import { DuplicateUserEmailError } from "../../../common/errors/custom.error.js";
 
 
 export const userSignUp = async (data: UserSignUpRequest) => {
