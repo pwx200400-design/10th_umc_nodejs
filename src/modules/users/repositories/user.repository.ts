@@ -1,6 +1,6 @@
 
 import { prisma } from "../../../db.config.js";
-import { DuplicateUserEmailError } from "../../../../src/common/errors/custom.error.js";
+import { DuplicateUserEmailError } from "../../../common/errors/custom.error.js";
 
 export const addUser = async (data: any) => {
     
